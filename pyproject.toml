@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hivemind-wyoming-binary-protocol"
+description = "Wyoming-backed audio binary protocol for HiveMind"
+readme = "README.md"
+authors = [{ name = "jarbasAI", email = "jarbasai@mailfence.com" }]
+license = "Apache-2.0"
+requires-python = ">=3.10"
+keywords = ["hivemind", "wyoming", "audio", "binary", "protocol", "plugin"]
+dynamic = ["version", "dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol"
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-cov",
+]
+
+[project.entry-points."hivemind.binary.protocol"]
+"hivemind-wyoming-binary-protocol-plugin" = "hivemind_wyoming_binary_protocol.protocol:WyomingBinaryProtocol"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--ignore=tests/e2e"
+
+[tool.setuptools]
+packages = ["hivemind_wyoming_binary_protocol"]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = { attr = "hivemind_wyoming_binary_protocol.version.__version__" }
+dependencies = { file = ["requirements.txt"] }

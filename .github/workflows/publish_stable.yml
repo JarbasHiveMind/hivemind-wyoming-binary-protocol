@@ -1,0 +1,16 @@
+name: Stable Release
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+jobs:
+  publish_stable:
+    uses: OpenVoiceOS/gh-automations/.github/workflows/publish-stable.yml@dev
+    secrets:
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+    with:
+      branch: 'master'
+      version_file: 'hivemind_audio_binary_protocol/version.py'
+      publish_release: true
+      publish_pypi: true
+      sync_dev: true

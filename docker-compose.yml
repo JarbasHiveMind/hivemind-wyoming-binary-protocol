@@ -1,0 +1,33 @@
+# Wyoming ASR + TTS servers for the hivemind-wyoming-binary-protocol round trip.
+#
+#   docker compose up -d
+#
+# These are the same servers a Home Assistant user runs as the "Wyoming
+# Protocol" add-ons. The plugin points at them over TCP.
+#
+#   wyoming-faster-whisper  ASR  ->  127.0.0.1:10300
+#   wyoming-piper           TTS  ->  127.0.0.1:10200
+#
+# First start downloads the whisper model (base-int8) and the Piper voice.
+services:
+  wyoming-whisper:
+    image: rhasspy/wyoming-whisper:latest
+    command: --model base-int8 --language en
+    ports:
+      - "10300:10300"
+    volumes:
+      - whisper-data:/data
+    restart: unless-stopped
+
+  wyoming-piper:
+    image: rhasspy/wyoming-piper:latest
+    command: --voice en_US-lessac-medium
+    ports:
+      - "10200:10200"
+    volumes:
+      - piper-data:/data
+    restart: unless-stopped
+
+volumes:
+  whisper-data:
+  piper-data:

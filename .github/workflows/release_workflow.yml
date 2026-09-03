@@ -1,0 +1,20 @@
+name: Release Alpha and Propose Stable
+on:
+  pull_request:
+    types: [closed]
+    branches: [dev]
+  workflow_dispatch:
+jobs:
+  publish_alpha:
+    uses: OpenVoiceOS/gh-automations/.github/workflows/publish-alpha.yml@dev
+    secrets:
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+    with:
+      branch: 'dev'
+      base_branch: 'master'
+      version_file: 'hivemind_audio_binary_protocol/version.py'
+      update_changelog: true
+      publish_prerelease: true
+      changelog_max_issues: 100
+      publish_pypi: true
+      propose_release: true
