@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.1a2](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/tree/0.1.1a2) (2026-09-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/compare/0.1.1a1...0.1.1a2)
+
 ## [0.1.1a1](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/tree/0.1.1a1) (2026-09-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/compare/95a0b1b74216bae2ef357f4343370b26b77bc1a5...0.1.1a1)
