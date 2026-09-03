@@ -10,7 +10,7 @@ jobs:
     uses: OpenVoiceOS/gh-automations/.github/workflows/coverage.yml@dev
     with:
       python_version: '3.11'
-      coverage_source: 'hivemind_audio_binary_protocol'
+      coverage_source: 'hivemind_wyoming_binary_protocol'
       test_path: 'tests/'
       install_extras: '.[test]'
       min_coverage: 0
