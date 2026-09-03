@@ -12,7 +12,7 @@ jobs:
     with:
       branch: 'dev'
       base_branch: 'master'
-      version_file: 'hivemind_audio_binary_protocol/version.py'
+      version_file: 'hivemind_wyoming_binary_protocol/version.py'
       update_changelog: true
       publish_prerelease: true
       changelog_max_issues: 100
