@@ -56,6 +56,37 @@ def _is_supported_audio_format(sample_rate: int, sample_width: int) -> bool:
     return sample_rate == SAMPLE_RATE and sample_width == SAMPLE_WIDTH
 
 
+def _detect_container(audio: bytes) -> Optional[str]:
+    """Name the container the bytes start with, or None for bare samples.
+
+    Every audio surface of this node carries uncompressed PCM
+    (HIVEMIND-AUDIO-1 §2), so a container is a sender error, not an
+    alternative encoding. The name is for the refusal message; nothing here
+    reads a format OUT of the bytes. §7 forbids that: "treat the payload
+    bytes as self-describing -- the tag and metadata are the only
+    description". The rate and the width keep coming from the message.
+
+    Each test is as long as the format allows, because the cost of a false
+    positive is a refused utterance of real speech. Eight bytes of ASCII for
+    the RIFF family, four for Ogg and FLAC, three for an ID3 tag.
+    """
+    if len(audio) >= 12 and audio[:4] in (b"RIFF", b"RF64"):
+        # RIFF is a family: WAVE is the audio member, and AVI or any other
+        # form id here is just as unreadable as audio. The form id is four
+        # printable ASCII bytes, which is what keeps this at eight bytes of
+        # evidence rather than four.
+        form = audio[8:12]
+        if all(0x20 <= b < 0x7F for b in form):
+            return f"{audio[:4].decode('ascii')}/{form.decode('ascii')}"
+    if audio[:4] == b"OggS":
+        return "Ogg"
+    if audio[:4] == b"fLaC":
+        return "FLAC"
+    if audio[:3] == b"ID3":
+        return "MP3 (ID3 tag)"
+    return None
+
+
 def _mean_abs_amplitude(pcm: bytes) -> float:
     """Mean absolute amplitude of signed 16-bit little-endian PCM."""
     if len(pcm) < 2:
@@ -172,9 +203,37 @@ class WyomingBinaryProtocol(BinaryDataHandlerProtocol):
     # ── Wyoming backends ──────────────────────────────────────────────────
     def transcribe(self, pcm: bytes, sample_rate: int, sample_width: int,
                    lang: Optional[str]) -> Optional[str]:
-        """Transcribe raw PCM via the Wyoming ASR server. None on failure."""
+        """Transcribe raw PCM via the Wyoming ASR server. None on failure.
+
+        A container is refused here rather than at each caller. Every audio
+        surface of this node reaches the ASR server through this method --
+        the RAW_AUDIO stream, both binary STT tags and the base64 bus field
+        -- so this is the one place the contract can be held, and a caller
+        added later can not forget it.
+        """
         if not self.asr_uri:
             LOG.error("Wyoming ASR request with no asr_uri configured")
+            return None
+        container = _detect_container(pcm)
+        if container is not None:
+            # HIVEMIND-AUDIO-1 §2: "A RAW_AUDIO payload (HIVEMIND-WIRE-1 §5),
+            # and the audio inside the STT tags, carries uncompressed PCM
+            # samples", and "A receiver that cannot process the stated format
+            # MUST reject the payload rather than misinterpret the bytes".
+            # A container is exactly that case: its header is not audio, and
+            # transcribing it puts a click in front of the utterance and
+            # shifts every sample after it.
+            #
+            # Refused, never parsed. Reading the rate and the width out of
+            # the header is the obvious next step and §7 forbids it: "treat
+            # the payload bytes as self-describing -- the tag and metadata
+            # are the only description".
+            LOG.error(
+                f"Rejecting audio: the payload is a {container} container, "
+                f"and every audio surface of this node carries headerless "
+                f"PCM (HIVEMIND-AUDIO-1 §2). Send the sample frames only, "
+                f"with the rate and the width in the tag metadata or the "
+                f"message.")
             return None
         return wyoming_transcribe(self.asr_uri, pcm, sample_rate, sample_width,
                                   self.sample_channels, lang)
@@ -299,11 +358,34 @@ class WyomingBinaryProtocol(BinaryDataHandlerProtocol):
 
     # ── base64 STT/TTS over the OVOS bus ──────────────────────────────────
     def transcribe_b64_audio(self, message: Message) -> List[Tuple[str, float]]:
+        """Transcribe the base64 audio field of an STT bus message.
+
+        The field carries **headerless PCM**, not a container. The format is
+        the one HIVEMIND-AUDIO-1 §2 states for the audio inside the STT tags:
+        "A ``RAW_AUDIO`` payload ... and the audio inside the STT tags,
+        carries **uncompressed PCM** samples", defaulting to mono signed
+        16-bit at 16 kHz and overridden only by the ``sample_rate`` and
+        ``sample_width`` fields of the same message. Those two fields are
+        what makes the contract PCM: a container states its own format, so a
+        sender could not disagree with it, and ``hivemind-audio-binary-
+        protocol`` builds the same field into an ``AudioData`` with the same
+        two numbers.
+
+        A WAV therefore can not be read here. Its 44-byte RIFF header would
+        be counted as audio and prefix the utterance with a click, so it is
+        refused instead of misread, which is what §2 requires of a receiver
+        that can not process the bytes it is given. The refusal is not in
+        this method: it is in ``transcribe``, which this path and the three
+        binary paths all reach the ASR server through, because §2 names
+        ``RAW_AUDIO`` and the STT tags in the same sentence as this field.
+        """
         b64audio = message.data["audio"]
         lang = message.data.get("lang")
         sample_rate = message.data.get("sample_rate", SAMPLE_RATE)
         sample_width = message.data.get("sample_width", SAMPLE_WIDTH)
         pcm = pybase64.b64decode(b64audio)
+        # The container refusal itself is in transcribe(), the one funnel
+        # every audio path of this node reaches the ASR server through.
         text = self.transcribe(pcm, sample_rate, sample_width, lang)
         return [(text.strip(" '\""), 1.0)] if text else []
 

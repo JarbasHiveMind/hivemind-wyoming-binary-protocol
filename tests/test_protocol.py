@@ -251,7 +251,10 @@ def test_b64_transcribe_replies_to_satellite(monkeypatch):
     proto.hm_protocol.clients = {"sat::1": client}
 
     from ovos_bus_client.message import Message
-    b64 = base64.b64encode(pcm_to_wav(_loud(2000), SAMPLE_RATE, SAMPLE_WIDTH, 1)).decode()
+    # headerless PCM: the b64 STT field is not a container (HIVEMIND-AUDIO-1 §2).
+    # This test used to send a WAV here, and passed only because the ASR call is
+    # mocked, so the 44-byte header it prepended was never measured.
+    b64 = base64.b64encode(_loud(2000)).decode()
     proto.handle_transcribe_b64(Message("recognizer_loop:b64_transcribe",
                                         {"audio": b64, "lang": "en-us"},
                                         context={"source": "sat::1"}))
@@ -279,3 +282,197 @@ def test_transcribe_helper_empty_audio_returns_none():
 def test_synthesize_helper_connection_error_returns_none():
     from hivemind_wyoming_binary_protocol.client import wyoming_synthesize
     assert wyoming_synthesize("tcp://127.0.0.1:1", "hello") is None
+
+
+# ── the base64 STT field is headerless PCM, not a container ───────────────
+def test_b64_transcribe_rejects_a_wav_container(monkeypatch):
+    """A WAV in the b64 audio field is refused, not transcribed.
+
+    HIVEMIND-AUDIO-1 §2: the audio inside the STT tags carries uncompressed
+    PCM, and a receiver that can not process the bytes must reject them rather
+    than misinterpret them. Before the fix the 44-byte RIFF header was handed
+    to the ASR server as audio.
+    """
+    import base64
+
+    seen = []
+    monkeypatch.setattr(protocol_module, "wyoming_transcribe",
+                        lambda uri, pcm, *a, **k: seen.append(pcm) or "hello")
+    proto = _make_protocol()
+
+    from ovos_bus_client.message import Message
+    wav = pcm_to_wav(_loud(1600), SAMPLE_RATE, SAMPLE_WIDTH, 1)
+    assert wav[:4] == b"RIFF"
+    msg = Message("recognizer_loop:b64_transcribe",
+                  {"audio": base64.b64encode(wav).decode("utf-8"),
+                   "lang": "en-us"})
+
+    assert proto.transcribe_b64_audio(msg) == []
+    assert seen == []  # the container never reached the ASR server
+
+
+def test_b64_transcribe_accepts_headerless_pcm(monkeypatch):
+    """The control: the same samples without the header still transcribe."""
+    import base64
+
+    seen = []
+    monkeypatch.setattr(protocol_module, "wyoming_transcribe",
+                        lambda uri, pcm, *a, **k: seen.append(pcm) or "hello")
+    proto = _make_protocol()
+
+    from ovos_bus_client.message import Message
+    pcm = _loud(1600)
+    msg = Message("recognizer_loop:b64_transcribe",
+                  {"audio": base64.b64encode(pcm).decode("utf-8"),
+                   "lang": "en-us"})
+
+    assert proto.transcribe_b64_audio(msg) == [("hello", 1.0)]
+    assert seen == [pcm]
+
+
+# ── every audio surface refuses a container, not just the base64 field ────
+def _recorder(monkeypatch, text="hello"):
+    """Substitute the ASR client and record exactly what reaches it."""
+    seen = []
+
+    def _fake(uri, pcm, *a, **k):
+        seen.append(pcm)
+        return text
+
+    monkeypatch.setattr(protocol_module, "wyoming_transcribe", _fake)
+    return seen
+
+
+def _wav():
+    """3244 bytes: a 44-byte RIFF/WAVE header in front of 3200 of samples."""
+    wav = pcm_to_wav(_loud(1600), SAMPLE_RATE, SAMPLE_WIDTH, 1)
+    assert wav[:4] == b"RIFF" and len(wav) == 3244
+    return wav
+
+
+def test_binary_transcribe_request_refuses_a_container(monkeypatch):
+    """STT_AUDIO_TRANSCRIBE. The header used to reach the ASR as audio."""
+    seen = _recorder(monkeypatch)
+    proto = _make_protocol()
+    client = _make_client()
+
+    proto.handle_stt_transcribe_request(_wav(), SAMPLE_RATE, SAMPLE_WIDTH,
+                                        "en-us", client)
+
+    assert seen == []
+    replies = [m for m in _bus(client)
+               if m.payload.msg_type == "recognizer_loop:transcribe.response"]
+    assert len(replies) == 1
+    assert replies[0].payload.data["transcriptions"] == []
+
+
+def test_binary_handle_request_refuses_a_container(monkeypatch):
+    """STT_AUDIO_HANDLE. No utterance may be injected from a header."""
+    seen = _recorder(monkeypatch)
+    proto = _make_protocol()
+    client = _make_client()
+
+    proto.handle_stt_handle_request(_wav(), SAMPLE_RATE, SAMPLE_WIDTH,
+                                    "en-us", client)
+
+    assert seen == []
+    proto.hm_protocol.handle_inject_agent_msg.assert_not_called()
+    assert [m for m in _bus(client)
+            if m.payload.msg_type == "recognizer_loop:speech.recognition.unknown"]
+
+
+def test_raw_audio_stream_refuses_a_container(monkeypatch):
+    """RAW_AUDIO, the path the module docstring calls the primary one.
+
+    A satellite that streams a whole WAV and then ends the turn had its
+    header transcribed with the samples.
+    """
+    from ovos_bus_client.message import Message
+
+    seen = _recorder(monkeypatch)
+    proto = _make_protocol()
+    client = _make_client(peer="sat::9")
+    proto.hm_protocol.clients = {"sat::9": client}
+
+    proto.handle_microphone_input(_wav(), SAMPLE_RATE, SAMPLE_WIDTH, client)
+    proto.handle_record_end(Message("recognizer_loop:record_end",
+                                    context={"source": "sat::9"}))
+
+    assert seen == []
+    proto.hm_protocol.handle_inject_agent_msg.assert_not_called()
+
+
+def test_the_same_samples_headerless_still_reach_the_asr(monkeypatch):
+    """The control for all three, on the same bytes minus the header."""
+    from ovos_bus_client.message import Message
+
+    pcm = _loud(1600)
+    assert len(pcm) == 3200
+
+    seen = _recorder(monkeypatch)
+    proto = _make_protocol()
+    client = _make_client()
+    proto.handle_stt_transcribe_request(pcm, SAMPLE_RATE, SAMPLE_WIDTH,
+                                        "en-us", client)
+
+    seen2 = _recorder(monkeypatch)
+    proto2 = _make_protocol()
+    client2 = _make_client()
+    proto2.handle_stt_handle_request(pcm, SAMPLE_RATE, SAMPLE_WIDTH,
+                                     "en-us", client2)
+
+    seen3 = _recorder(monkeypatch)
+    proto3 = _make_protocol()
+    client3 = _make_client(peer="sat::9")
+    proto3.hm_protocol.clients = {"sat::9": client3}
+    proto3.handle_microphone_input(pcm, SAMPLE_RATE, SAMPLE_WIDTH, client3)
+    proto3.handle_record_end(Message("recognizer_loop:record_end",
+                                     context={"source": "sat::9"}))
+
+    assert seen == [pcm]
+    assert seen2 == [pcm]
+    assert seen3 == [pcm]
+    proto2.hm_protocol.handle_inject_agent_msg.assert_called_once()
+    proto3.hm_protocol.handle_inject_agent_msg.assert_called_once()
+
+
+def test_the_other_containers_are_refused_too(monkeypatch):
+    """§2 asks for a refusal of what can not be processed, not of WAV alone.
+
+    Each of these was transcribed as PCM before. No fleet sender is known to
+    produce them in these fields, so this is completeness against the clause
+    rather than a second measured defect.
+    """
+    samples = _loud(1000)
+    containers = {
+        "RIFF/WAVE": pcm_to_wav(samples, SAMPLE_RATE, SAMPLE_WIDTH, 1),
+        "RIFF/AVI": b"RIFF" + b"\x00" * 4 + b"AVI " + samples,
+        "RF64": b"RF64" + b"\xff" * 4 + b"WAVE" + samples,
+        "Ogg": b"OggS" + b"\x00" * 8 + samples,
+        "FLAC": b"fLaC" + b"\x00" * 8 + samples,
+        "MP3 with an ID3 tag": b"ID3" + b"\x04\x00\x00" + samples,
+    }
+    for label, payload in containers.items():
+        seen = _recorder(monkeypatch)
+        proto = _make_protocol()
+        client = _make_client()
+        proto.handle_stt_transcribe_request(payload, SAMPLE_RATE,
+                                            SAMPLE_WIDTH, "en-us", client)
+        assert seen == [], f"{label} reached the ASR server"
+
+
+def test_a_short_payload_is_not_a_container(monkeypatch):
+    """The negative result, kept as a test.
+
+    Eleven bytes can not hold a RIFF header and samples, so there is no
+    container to misread and nothing to refuse. The worst case is a few
+    bytes of junk handed to the ASR, which a sender achieves just as well
+    with bare PCM.
+    """
+    seen = _recorder(monkeypatch)
+    proto = _make_protocol()
+    client = _make_client()
+    for n in (4, 8, 11):
+        proto.handle_stt_transcribe_request(_wav()[:n], SAMPLE_RATE,
+                                            SAMPLE_WIDTH, "en-us", client)
+    assert [len(p) for p in seen] == [4, 8, 11]
