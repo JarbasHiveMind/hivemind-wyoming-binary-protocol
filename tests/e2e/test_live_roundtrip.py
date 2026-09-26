@@ -16,12 +16,13 @@ plugin relies on.
 """
 import os
 import socket
-import wave
 
 import pytest
 
-from hivemind_wyoming_binary_protocol.client import (wyoming_synthesize,
-                                                     wyoming_transcribe)
+from hivemind_wyoming_binary_protocol.client import (
+    wyoming_synthesize,
+    wyoming_transcribe,
+)
 
 ASR_URI = os.environ.get("WYOMING_ASR_URI", "tcp://127.0.0.1:10300")
 TTS_URI = os.environ.get("WYOMING_TTS_URI", "tcp://127.0.0.1:10200")

@@ -16,19 +16,23 @@ Wyoming TTS server and streamed back as TTS audio.
 import io
 import wave
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 import pybase64
-from hivemind_bus_client.message import (HiveMessage, HiveMessageType,
-                                         HiveMindBinaryPayloadType)
-from hivemind_plugin_manager.protocols import (BinaryDataHandlerProtocol,
-                                               ClientCallbacks)
+from hivemind_bus_client.message import (
+    HiveMessage,
+    HiveMessageType,
+    HiveMindBinaryPayloadType,
+)
+from hivemind_plugin_manager.protocols import BinaryDataHandlerProtocol, ClientCallbacks
 from ovos_bus_client.message import Message
 from ovos_bus_client.util import get_message_lang
 from ovos_utils.log import LOG
 
-from hivemind_wyoming_binary_protocol.client import (wyoming_synthesize,
-                                                     wyoming_transcribe)
+from hivemind_wyoming_binary_protocol.client import (
+    wyoming_synthesize,
+    wyoming_transcribe,
+)
 
 if TYPE_CHECKING:  # hivemind-core is the AGPL host; imported only for typing
     from hivemind_core.protocol import HiveMindClientConnection
@@ -99,25 +103,25 @@ class WyomingBinaryProtocol(BinaryDataHandlerProtocol):
     replacement, but replaces the OVOS STT plugin with a Wyoming ASR server and
     the OVOS TTS plugin with a Wyoming TTS server.
     """
-    config: Dict[str, Any] = field(default_factory=dict)
-    hm_protocol: Optional[Any] = None
-    agent_protocol: Optional[Any] = None
-    callbacks: Optional[ClientCallbacks] = None
-    asr_uri: Optional[str] = None
-    tts_uri: Optional[str] = None
-    tts_voice: Optional[str] = None
+    config: dict[str, Any] = field(default_factory=dict)
+    hm_protocol: Any | None = None
+    agent_protocol: Any | None = None
+    callbacks: ClientCallbacks | None = None
+    asr_uri: str | None = None
+    tts_uri: str | None = None
+    tts_voice: str | None = None
     sample_rate: int = SAMPLE_RATE
     sample_width: int = SAMPLE_WIDTH
     sample_channels: int = SAMPLE_CHANNELS
     # peers streaming RAW_AUDIO in a format this node can not process; told once,
     # not once per chunk (a raw stream is continuous — a per-chunk refusal floods)
     refused_streams: set = field(default_factory=set)
-    buffers: Dict[str, _StreamBuffer] = field(default_factory=dict)
+    buffers: dict[str, _StreamBuffer] = field(default_factory=dict)
 
     def __post_init__(self):
         super().__post_init__()
 
-        def _uri(kind: str) -> Optional[str]:
+        def _uri(kind: str) -> str | None:
             uri = self.config.get(f"{kind}_uri")
             if uri:
                 return uri
@@ -171,7 +175,7 @@ class WyomingBinaryProtocol(BinaryDataHandlerProtocol):
 
     # ── Wyoming backends ──────────────────────────────────────────────────
     def transcribe(self, pcm: bytes, sample_rate: int, sample_width: int,
-                   lang: Optional[str]) -> Optional[str]:
+                   lang: str | None) -> str | None:
         """Transcribe raw PCM via the Wyoming ASR server. None on failure."""
         if not self.asr_uri:
             LOG.error("Wyoming ASR request with no asr_uri configured")
@@ -179,7 +183,7 @@ class WyomingBinaryProtocol(BinaryDataHandlerProtocol):
         return wyoming_transcribe(self.asr_uri, pcm, sample_rate, sample_width,
                                   self.sample_channels, lang)
 
-    def synthesize(self, utterance: str) -> Optional[bytes]:
+    def synthesize(self, utterance: str) -> bytes | None:
         """Synthesize ``utterance`` via the Wyoming TTS server as WAV bytes."""
         if not self.tts_uri:
             LOG.error("Wyoming TTS request with no tts_uri configured")
@@ -298,7 +302,7 @@ class WyomingBinaryProtocol(BinaryDataHandlerProtocol):
                 payload=Message("recognizer_loop:speech.recognition.unknown")))
 
     # ── base64 STT/TTS over the OVOS bus ──────────────────────────────────
-    def transcribe_b64_audio(self, message: Message) -> List[Tuple[str, float]]:
+    def transcribe_b64_audio(self, message: Message) -> list[tuple[str, float]]:
         b64audio = message.data["audio"]
         lang = message.data.get("lang")
         sample_rate = message.data.get("sample_rate", SAMPLE_RATE)
@@ -307,7 +311,7 @@ class WyomingBinaryProtocol(BinaryDataHandlerProtocol):
         text = self.transcribe(pcm, sample_rate, sample_width, lang)
         return [(text.strip(" '\""), 1.0)] if text else []
 
-    def get_b64_tts(self, message: Message) -> Optional[str]:
+    def get_b64_tts(self, message: Message) -> str | None:
         wav = self.synthesize(message.data["utterance"])
         if wav is None:
             return None

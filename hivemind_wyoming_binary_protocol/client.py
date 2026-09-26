@@ -14,7 +14,6 @@ A Wyoming server speaks a small event protocol over a socket:
 """
 import asyncio
 from dataclasses import dataclass
-from typing import Optional
 
 from ovos_utils.log import LOG
 from wyoming.asr import Transcribe, Transcript
@@ -38,8 +37,8 @@ def _chunked(data: bytes, size: int):
 
 
 async def _async_transcribe(uri: str, pcm: bytes, rate: int, width: int,
-                            channels: int, lang: Optional[str],
-                            chunk_size: int) -> Optional[str]:
+                            channels: int, lang: str | None,
+                            chunk_size: int) -> str | None:
     async with AsyncClient.from_uri(uri) as client:
         # Transcribe primes the server (and picks the language) before audio.
         await client.write_event(Transcribe(language=lang).event())
@@ -60,8 +59,8 @@ async def _async_transcribe(uri: str, pcm: bytes, rate: int, width: int,
     return None
 
 
-async def _async_synthesize(uri: str, text: str, voice: Optional[str]
-                            ) -> Optional[WyomingAudio]:
+async def _async_synthesize(uri: str, text: str, voice: str | None
+                            ) -> WyomingAudio | None:
     synth_voice = SynthesizeVoice(name=voice) if voice else None
     async with AsyncClient.from_uri(uri) as client:
         await client.write_event(Synthesize(text=text, voice=synth_voice).event())
@@ -89,8 +88,8 @@ async def _async_synthesize(uri: str, text: str, voice: Optional[str]
 
 
 def wyoming_transcribe(uri: str, pcm: bytes, rate: int, width: int,
-                       channels: int = 1, lang: Optional[str] = None,
-                       chunk_size: int = 4096) -> Optional[str]:
+                       channels: int = 1, lang: str | None = None,
+                       chunk_size: int = 4096) -> str | None:
     """Transcribe raw PCM via a Wyoming ASR server.
 
     Returns the transcript text, or ``None`` when the server produced no
@@ -103,13 +102,16 @@ def wyoming_transcribe(uri: str, pcm: bytes, rate: int, width: int,
     try:
         return asyncio.run(
             _async_transcribe(uri, pcm, rate, width, channels, lang, chunk_size))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - the docstring above is the contract
+        # Every failure degrades to None on purpose: a dead or slow ASR
+        # server must not raise into the hub's handler, where it would end
+        # the satellite's connection instead of one transcript.
         LOG.error(f"Wyoming ASR request to {uri} failed: {e}")
         return None
 
 
-def wyoming_synthesize(uri: str, text: str, voice: Optional[str] = None
-                       ) -> Optional[WyomingAudio]:
+def wyoming_synthesize(uri: str, text: str, voice: str | None = None
+                       ) -> WyomingAudio | None:
     """Synthesize ``text`` via a Wyoming TTS server.
 
     Returns a :class:`WyomingAudio` (raw PCM + format), or ``None`` when the
@@ -119,6 +121,8 @@ def wyoming_synthesize(uri: str, text: str, voice: Optional[str] = None
         return None
     try:
         return asyncio.run(_async_synthesize(uri, text, voice))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - the docstring above is the contract
+        # As above: a dead TTS server returns no audio, and the caller sends
+        # the satellite a synth error. It never raises into the hub.
         LOG.error(f"Wyoming TTS request to {uri} failed: {e}")
         return None

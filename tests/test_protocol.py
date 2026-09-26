@@ -8,13 +8,15 @@ neural backends.
 import struct
 from unittest.mock import MagicMock
 
-import pytest
 from hivemind_bus_client.message import HiveMessageType
 
 import hivemind_wyoming_binary_protocol.protocol as protocol_module
-from hivemind_wyoming_binary_protocol.protocol import (SAMPLE_RATE, SAMPLE_WIDTH,
-                                                       WyomingBinaryProtocol,
-                                                       pcm_to_wav)
+from hivemind_wyoming_binary_protocol.protocol import (
+    SAMPLE_RATE,
+    SAMPLE_WIDTH,
+    WyomingBinaryProtocol,
+    pcm_to_wav,
+)
 
 
 def _make_protocol(asr_uri="tcp://asr:10300", tts_uri="tcp://tts:10200"):
@@ -207,6 +209,7 @@ def test_speak_synth_returns_wav_binary(monkeypatch):
 
 def test_speak_b64_returns_base64_wav(monkeypatch):
     import base64
+
     from hivemind_wyoming_binary_protocol.client import WyomingAudio
     monkeypatch.setattr(protocol_module, "wyoming_synthesize",
                         lambda *a, **k: WyomingAudio(b"\x03\x04" * 100, 22050, 2, 1))
