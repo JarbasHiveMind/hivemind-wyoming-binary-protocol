@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.2a1](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/tree/0.1.2a1) (2026-09-28)
+
+[Full Changelog](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/compare/0.1.1a3...0.1.2a1)
+
+**Merged pull requests:**
+
+- fix\(stt\): every audio surface refuses a container, not the b64 field alone [\#7](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/pull/7) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
+## [0.1.1a3](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/tree/0.1.1a3) (2026-09-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/compare/0.1.1a2...0.1.1a3)
+
 ## [0.1.1a2](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/tree/0.1.1a2) (2026-09-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/compare/0.1.1a1...0.1.1a2)
