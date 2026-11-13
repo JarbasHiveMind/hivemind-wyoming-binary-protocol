@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.3a1](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/tree/0.1.3a1) (2026-11-13)
+
+[Full Changelog](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/compare/0.1.2a1...0.1.3a1)
+
+**Merged pull requests:**
+
+- fix\(ci\): set test\_path so the build test actually runs the tests [\#6](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/pull/6) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [0.1.2a1](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/tree/0.1.2a1) (2026-09-28)
 
 [Full Changelog](https://github.com/JarbasHiveMind/hivemind-wyoming-binary-protocol/compare/0.1.1a3...0.1.2a1)
