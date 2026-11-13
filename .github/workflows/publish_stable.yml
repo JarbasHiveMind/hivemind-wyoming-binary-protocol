@@ -10,7 +10,7 @@ jobs:
       PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
     with:
       branch: 'master'
-      version_file: 'hivemind_audio_binary_protocol/version.py'
+      version_file: 'hivemind_wyoming_binary_protocol/version.py'
       publish_release: true
       publish_pypi: true
       sync_dev: true
